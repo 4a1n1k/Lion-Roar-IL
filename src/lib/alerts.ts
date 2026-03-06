@@ -57,23 +57,26 @@ export function processAlerts(
         return a.category_desc === targetCategoryDesc;
     });
 
-    // ── Count alert records per hour ─────────────────────────────────────────
-    // tzevaadom sends one record per city-batch per salvo.
-    // The same matrix_id can appear multiple times = multiple salvos (e.g. 10:13 and 10:21).
-    // We deduplicate only exact duplicates: same matrix_id + same city + same timestamp.
-    // This matches how tzevaadom/Pikud Haoref counts: each distinct firing = 1 alert.
+    // ── Count alert records per hour — dedup by raw record, not by city ──────
+    // tzevaadom format: [matrix_id, category, [cities], timestamp]
+    // One raw record → expanded to N city rows, each with a different rid.
+    // Counting by rid = counting every city = massive inflation for "כל הארץ".
+    // Correct key = matrix_id:date:time (exact timestamp) → counts the original
+    // raw record once, regardless of how many cities it covered.
+    // Same matrix_id at a different time = a different salvo = counted again. ✓
     const hourlyBuckets: Record<number, number> = {};
     for (let i = 0; i < 24; i++) hourlyBuckets[i] = 0;
 
-    // Track seen rid to avoid counting the exact same city-record twice
-    const seenRids = new Set<number>();
+    const seenRecords = new Set<string>();
 
     filteredByType.forEach(a => {
         try {
             const alertDate = parse(`${a.date} ${a.time}`, 'dd.MM.yyyy HH:mm:ss', new Date());
             if (isWithinInterval(alertDate, { start: startOfDay(startDate), end: endOfDay(endDate) })) {
-                if (!seenRids.has(a.rid)) {
-                    seenRids.add(a.rid);
+                // key = matrix_id + exact timestamp → unique per raw record
+                const key = `${a.matrix_id}:${a.date}:${a.time}`;
+                if (!seenRecords.has(key)) {
+                    seenRecords.add(key);
                     hourlyBuckets[getHours(alertDate)]++;
                 }
             }

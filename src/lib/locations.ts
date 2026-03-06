@@ -28,7 +28,12 @@ export const DISTRICTS: District[] = [
         name: 'מחוז חיפה',
         cities: [
             { name: 'חיפה', value: 'חיפה' },
-            { name: 'קריות', value: 'קריות' },
+            { name: 'קרית ים', value: 'קרית ים' },
+            { name: 'קרית אתא', value: 'קרית אתא' },
+            { name: 'קרית מוצקין', value: 'קרית מוצקין' },
+            { name: 'קרית חיים', value: 'קרית חיים' },
+            { name: 'קרית ביאליק', value: 'קרית ביאליק' },
+            { name: 'קרית טבעון', value: 'קרית טבעון' },
             { name: 'חדרה', value: 'חדרה' },
             { name: 'טירת כרמל', value: 'טירת כרמל' },
             { name: 'נשר', value: 'נשר' },
