@@ -1,5 +1,5 @@
-import { parse, format, isWithinInterval, startOfDay, endOfDay, getHours } from 'date-fns';
-import { ALL_DISTRICTS, ALL_CITIES_IN_DISTRICT, DISTRICTS } from './locations';
+import { parse, isWithinInterval, startOfDay, endOfDay, getHours } from 'date-fns';
+import { ALL_DISTRICTS, ALL_CITIES_IN_DISTRICT, District } from './locations';
 
 export interface RawAlert {
     data: string;          // City name
@@ -20,28 +20,22 @@ export interface ProcessedStats {
 
 export const ALL_EVENTS = 'כל האירועים';
 
-export function filterByLocation(alerts: RawAlert[], district: string, city: string): RawAlert[] {
+export function filterByLocation(alerts: RawAlert[], district: string, city: string, districts: District[] = []): RawAlert[] {
     if (district === ALL_DISTRICTS || !district) return alerts;
 
-    const districtData = DISTRICTS.find(d => d.name === district);
+    const districtData = districts.find(d => d.name === district);
     if (!districtData) return alerts;
 
     if (city === ALL_CITIES_IN_DISTRICT || !city) {
-        const districtCityNames = districtData.cities.map(c => c.value);
-        // Match if the alert data (city string) includes any of the cities in the district
-        // Also normalize spaces/hyphens for robustness
-        return alerts.filter(a => {
-            const normalizedData = a.data.replace(/-/g, ' ').trim();
-            return districtCityNames.some(cn => {
-                const normalizedCn = cn.replace(/-/g, ' ').trim();
-                return normalizedData.includes(normalizedCn);
-            });
-        });
+        // Cities from Oref API are exact labels (e.g. "חיפה - כרמל, הדר ועיר תחתית")
+        // Alert data field also contains the exact label → use exact match
+        const cityValues = new Set(districtData.cities.map(c => c.value.trim()));
+        return alerts.filter(a => cityValues.has(a.data.trim()));
     }
 
-    // Match specific city
-    const normalizedCity = city.replace(/-/g, ' ').trim();
-    return alerts.filter(a => a.data.replace(/-/g, ' ').trim().includes(normalizedCity));
+    // Specific city — exact match
+    const trimmedCity = city.trim();
+    return alerts.filter(a => a.data.trim() === trimmedCity);
 }
 
 export function processAlerts(

@@ -11,12 +11,13 @@ import {
   AlertTriangle, Info, Clock
 } from 'lucide-react';
 import { processAlerts, filterByLocation, RawAlert, ALL_EVENTS } from '@/lib/alerts';
-import { DISTRICTS, ALL_DISTRICTS, ALL_CITIES_IN_DISTRICT, getCitiesByDistrict } from '@/lib/locations';
+import { District, ALL_DISTRICTS, ALL_CITIES_IN_DISTRICT } from '@/lib/locations';
 import RoutePlanner from './RoutePlanner';
 import AskTheLion from './AskTheLion';
 
 export default function Home() {
   const [alerts, setAlerts] = useState<RawAlert[]>([]);
+  const [districts, setDistricts] = useState<District[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mainTab, setMainTab] = useState<'alerts' | 'route' | 'ai'>('alerts');
@@ -34,9 +35,16 @@ export default function Home() {
     return [ALL_EVENTS, ...cats];
   }, [alerts]);
 
+  // Load districts/cities from Pikud Haoref API (dynamic, always up to date)
+  useEffect(() => {
+    fetch('/api/locations')
+      .then(r => r.json())
+      .then(data => { if (Array.isArray(data)) setDistricts(data); })
+      .catch(err => console.error('Failed to load locations:', err));
+  }, []);
+
   useEffect(() => {
     async function fetchData() {
-      setLoading(true);
       try {
         const from = format(new Date(startDate), 'dd.MM.yyyy');
         const to = format(new Date(endDate), 'dd.MM.yyyy');
@@ -65,7 +73,7 @@ export default function Home() {
   }, [startDate, endDate]);
 
   const filteredAlerts = useMemo(() => {
-    const locFiltered = filterByLocation(alerts, district, city);
+    const locFiltered = filterByLocation(alerts, district, city, districts);
     const isAllEvents = activeTab === ALL_EVENTS;
 
     return locFiltered.filter(a => {
@@ -86,7 +94,7 @@ export default function Home() {
   }, [alerts, district, city, activeTab]);
 
   const stats = useMemo(() => processAlerts(
-    filterByLocation(alerts, district, city),
+    filterByLocation(alerts, district, city, districts),
     new Date(startDate),
     new Date(endDate),
     activeTab
@@ -101,7 +109,10 @@ export default function Home() {
 
   const totalCount = stats.reduce((acc, curr) => acc + curr.count, 0);
 
-  const availableCities = useMemo(() => getCitiesByDistrict(district), [district]);
+  const availableCities = useMemo(() => {
+    const found = districts.find(d => d.name === district);
+    return found ? found.cities : [];
+  }, [districts, district]);
 
   return (
     <div className="container" dir="rtl">
@@ -152,7 +163,7 @@ export default function Home() {
                 }}
               >
                 <option value={ALL_DISTRICTS}>{ALL_DISTRICTS}</option>
-                {DISTRICTS.map(d => (
+                {districts.map(d => (
                   <option key={d.name} value={d.name}>{d.name}</option>
                 ))}
               </select>
