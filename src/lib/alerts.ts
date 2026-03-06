@@ -53,43 +53,40 @@ export function processAlerts(
     const isAllEvents = targetCategoryDesc === ALL_EVENTS || !targetCategoryDesc;
 
     const filteredByType = alerts.filter(a => {
-        if (isAllEvents) {
-            // Include ALL alerts with any category description
-            return !!a.category_desc;
-        }
+        if (isAllEvents) return !!a.category_desc;
         return a.category_desc === targetCategoryDesc;
     });
 
-    const hourlyBuckets: Record<number, number> = {};
-    for (let i = 0; i < 24; i++) hourlyBuckets[i] = 0;
+    // ── Count UNIQUE EVENTS per hour (by matrix_id) ──────────────────────────
+    // Each "event" = one alert from the command center (covers many cities).
+    // Without deduplication, one salvo over 50 cities = 50 counts → probability >100%.
+    const seenPerHour: Record<number, Set<number>> = {};
+    for (let i = 0; i < 24; i++) seenPerHour[i] = new Set();
 
     filteredByType.forEach(a => {
-        // Parse date format "DD.MM.YYYY"
         try {
             const alertDate = parse(`${a.date} ${a.time}`, 'dd.MM.yyyy HH:mm:ss', new Date());
-
             if (isWithinInterval(alertDate, { start: startOfDay(startDate), end: endOfDay(endDate) })) {
                 const hour = getHours(alertDate);
-                hourlyBuckets[hour]++;
+                seenPerHour[hour].add(a.matrix_id); // deduplicate by event ID
             }
         } catch (e) {
             console.error('Failed to parse date:', a.date, a.time);
         }
     });
 
-    const totalDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)));
+    const totalDays = Math.max(1, Math.ceil(
+        (endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+    ) + 1); // +1 to include both start and end day
 
-    return Object.keys(hourlyBuckets).map(h => {
-        const hourNum = parseInt(h);
-        const count = hourlyBuckets[hourNum];
-        // Probability is based on historical frequency in that hour across the selected days
-        const probability = Math.min(100, (count / totalDays) * 100);
-
+    return Array.from({ length: 24 }, (_, hourNum) => {
+        const count = seenPerHour[hourNum].size; // unique events, not city expansions
+        const probability = parseFloat(Math.min(100, (count / totalDays) * 100).toFixed(1));
         return {
-            hour: `${hourNum.toString().padStart(2, '0')}:00-${((hourNum + 1) % 24).toString().padStart(2, '0')}:00`,
+            hour: `${String(hourNum).padStart(2, '0')}:00-${String((hourNum + 1) % 24).padStart(2, '0')}:00`,
             count,
-            probability: parseFloat(probability.toFixed(2)),
-            type: targetCategoryDesc
+            probability,
+            type: targetCategoryDesc,
         };
     });
 }

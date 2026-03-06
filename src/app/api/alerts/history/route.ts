@@ -6,20 +6,17 @@ const TZEVAADOM_URL = 'https://www.tzevaadom.co.il/static/historical/all.json';
 // Local cache file — used as fallback when tzevaadom blocks datacenter IPs
 const LOCAL_CACHE_PATH = join(process.cwd(), 'tmp_alerts.json');
 
-// Category mapping from tzevaadom numeric category to description
+// Categories that are RELEVANT — active threats only
+const RELEVANT_CATEGORIES = new Set([0, 1, 2, 4, 9]);
+// 0,1 = ירי רקטות וטילים | 2 = חדירת כלי טיס עוין | 4,9 = חדירת מחבלים
+// Excluded: 5 (כטב"מ הסתיים), 10 (רקטות הסתיים), 13 (הסתיים), 3,6,7,8 (irrelevant)
+
 const CATEGORY_MAP: Record<number, string> = {
     0: 'ירי רקטות וטילים',
     1: 'ירי רקטות וטילים',
     2: 'חדירת כלי טיס עוין',
-    3: 'רעידת אדמה',
     4: 'חשד לחדירת מחבלים',
-    5: 'חדירת כלי טיס עוין - האירוע הסתיים',
-    6: 'אירוע חומרים מסוכנים',
-    7: 'אזהרה מפני גלי צונאמי',
-    8: 'הנחיות פיקוד העורף',
     9: 'חדירת מחבלים',
-    10: 'ירי רקטות וטילים - האירוע הסתיים',
-    13: 'האירוע הסתיים',
 };
 
 let cachedData: any[] | null = null;
@@ -46,9 +43,14 @@ async function getAllAlerts(): Promise<any[]> {
         raw = JSON.parse(fileContent);
     }
 
-    // Convert to RawAlert format: [matrix_id, category, [cities], unix_timestamp]
+    // Convert raw → RawAlert, keeping RELEVANT categories only
+    // Each record = [matrix_id, category, [cities], unix_timestamp]
     const alerts = raw.flatMap((record: any) => {
         const [matrixId, category, cities, timestamp] = record;
+
+        // Filter irrelevant categories (ended events, earthquakes, etc.)
+        if (!RELEVANT_CATEGORIES.has(category)) return [];
+
         const alertDate = new Date(timestamp * 1000);
         const dd = String(alertDate.getDate()).padStart(2, '0');
         const mm = String(alertDate.getMonth() + 1).padStart(2, '0');
