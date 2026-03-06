@@ -13,12 +13,13 @@ import {
 import { processAlerts, filterByLocation, RawAlert, ALL_EVENTS } from '@/lib/alerts';
 import { DISTRICTS, ALL_DISTRICTS, ALL_CITIES_IN_DISTRICT, getCitiesByDistrict } from '@/lib/locations';
 import RoutePlanner from './RoutePlanner';
+import AskTheLion from './AskTheLion';
 
 export default function Home() {
   const [alerts, setAlerts] = useState<RawAlert[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mainTab, setMainTab] = useState<'alerts' | 'route'>('alerts');
+  const [mainTab, setMainTab] = useState<'alerts' | 'route' | 'ai'>('alerts');
 
   // תאריכים סטטיים: תחילת מבצע שאגת הארי עד היום
   const [startDate] = useState('2026-02-28');
@@ -130,9 +131,16 @@ export default function Home() {
           >
             🗺️ תכנון נסיעה בטוחה
           </button>
+          <button
+            onClick={() => setMainTab('ai')}
+            style={{ padding: '0.75rem 1.5rem', border: 'none', background: 'none', cursor: 'pointer', fontWeight: 600, fontSize: '1rem', borderBottom: mainTab === 'ai' ? '3px solid var(--primary)' : '3px solid transparent', color: mainTab === 'ai' ? 'var(--primary)' : 'var(--muted)', display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+          >
+            🦁 שאל את האריה
+          </button>
         </div>
 
         {mainTab === 'route' && <RoutePlanner />}
+        {mainTab === 'ai' && <AskTheLion />}
         {mainTab === 'alerts' && (<>
         <div className="card">
           <div className="controls">
