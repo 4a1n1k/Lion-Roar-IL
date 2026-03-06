@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
-const PHOTON   = 'https://photon.komoot.io';
-const OSRM     = 'https://router.project-osrm.org/route/v1/driving';
+const PHOTON    = 'https://photon.komoot.io';
+const OSRM      = 'https://router.project-osrm.org/route/v1/driving';
 const TZEVAADOM = 'https://www.tzevaadom.co.il/static/historical/all.json';
+const LOCAL_CACHE_PATH = join(process.cwd(), 'tmp_alerts.json');
 
 export interface RouteOption {
     index: number; label: string;
@@ -43,8 +46,16 @@ let alertCacheTime = 0;
 
 async function getAlerts() {
     if (alertCache && Date.now() - alertCacheTime < 3600000) return alertCache!;
-    const res = await fetch(TZEVAADOM, { headers: { 'User-Agent': 'AlertsIL/2.0' }, cache: 'no-store' });
-    const raw: any[] = await res.json();
+
+    let raw: any[];
+    try {
+        const res = await fetch(TZEVAADOM, { headers: { 'User-Agent': 'AlertsIL/2.0' }, cache: 'no-store' });
+        if (!res.ok) throw new Error(`tzevaadom ${res.status}`);
+        raw = await res.json();
+    } catch {
+        // Fallback: local file (pre-fetched from non-datacenter IP)
+        raw = JSON.parse(readFileSync(LOCAL_CACHE_PATH, 'utf-8'));
+    }
     alertCache = raw.flatMap((r: any) => {
         const [, cat, cities, ts] = r;
         if (cat === 5 || cat === 10 || cat === 13) return [];
