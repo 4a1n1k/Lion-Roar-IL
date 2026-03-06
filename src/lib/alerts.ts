@@ -57,18 +57,25 @@ export function processAlerts(
         return a.category_desc === targetCategoryDesc;
     });
 
-    // ── Count UNIQUE EVENTS per hour (by matrix_id) ──────────────────────────
-    // Each "event" = one alert from the command center (covers many cities).
-    // Without deduplication, one salvo over 50 cities = 50 counts → probability >100%.
-    const seenPerHour: Record<number, Set<number>> = {};
-    for (let i = 0; i < 24; i++) seenPerHour[i] = new Set();
+    // ── Count alert records per hour ─────────────────────────────────────────
+    // tzevaadom sends one record per city-batch per salvo.
+    // The same matrix_id can appear multiple times = multiple salvos (e.g. 10:13 and 10:21).
+    // We deduplicate only exact duplicates: same matrix_id + same city + same timestamp.
+    // This matches how tzevaadom/Pikud Haoref counts: each distinct firing = 1 alert.
+    const hourlyBuckets: Record<number, number> = {};
+    for (let i = 0; i < 24; i++) hourlyBuckets[i] = 0;
+
+    // Track seen rid to avoid counting the exact same city-record twice
+    const seenRids = new Set<number>();
 
     filteredByType.forEach(a => {
         try {
             const alertDate = parse(`${a.date} ${a.time}`, 'dd.MM.yyyy HH:mm:ss', new Date());
             if (isWithinInterval(alertDate, { start: startOfDay(startDate), end: endOfDay(endDate) })) {
-                const hour = getHours(alertDate);
-                seenPerHour[hour].add(a.matrix_id); // deduplicate by event ID
+                if (!seenRids.has(a.rid)) {
+                    seenRids.add(a.rid);
+                    hourlyBuckets[getHours(alertDate)]++;
+                }
             }
         } catch (e) {
             console.error('Failed to parse date:', a.date, a.time);
@@ -80,7 +87,7 @@ export function processAlerts(
     ) + 1); // +1 to include both start and end day
 
     return Array.from({ length: 24 }, (_, hourNum) => {
-        const count = seenPerHour[hourNum].size; // unique events, not city expansions
+        const count = hourlyBuckets[hourNum];
         const probability = parseFloat(Math.min(100, (count / totalDays) * 100).toFixed(1));
         return {
             hour: `${String(hourNum).padStart(2, '0')}:00-${String((hourNum + 1) % 24).padStart(2, '0')}:00`,

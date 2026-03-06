@@ -7,16 +7,18 @@ const TZEVAADOM_URL = 'https://www.tzevaadom.co.il/static/historical/all.json';
 const LOCAL_CACHE_PATH = join(process.cwd(), 'tmp_alerts.json');
 
 // Categories that are RELEVANT — active threats only
-const RELEVANT_CATEGORIES = new Set([0, 1, 2, 4, 9]);
-// 0,1 = ירי רקטות וטילים | 2 = חדירת כלי טיס עוין | 4,9 = חדירת מחבלים
-// Excluded: 5 (כטב"מ הסתיים), 10 (רקטות הסתיים), 13 (הסתיים), 3,6,7,8 (irrelevant)
+const RELEVANT_CATEGORIES = new Set([0, 1, 2, 5]);
+// 0,1 = ירי רקטות וטילים
+// 2   = חדירת כלי טיס עוין (active UAV)
+// 5   = tzevaadom mistakenly labels active UAV alerts as "הסתיים" — treat as חדירת כלי טיס עוין
+// Excluded: 3 (earthquake), 4/9 (infiltrators - different threat), 6,7,8 (irrelevant),
+//           10 (רקטות הסתיים), 13 (הסתיים)
 
 const CATEGORY_MAP: Record<number, string> = {
     0: 'ירי רקטות וטילים',
     1: 'ירי רקטות וטילים',
     2: 'חדירת כלי טיס עוין',
-    4: 'חשד לחדירת מחבלים',
-    9: 'חדירת מחבלים',
+    5: 'חדירת כלי טיס עוין', // tzevaadom bug: active UAV alerts stored as cat 5
 };
 
 let cachedData: any[] | null = null;
