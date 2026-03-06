@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 const TZEVAADOM_URL = 'https://www.tzevaadom.co.il/static/historical/all.json';
+// Local cache file — used as fallback when tzevaadom blocks datacenter IPs
+const LOCAL_CACHE_PATH = join(process.cwd(), 'tmp_alerts.json');
 
 // Category mapping from tzevaadom numeric category to description
 const CATEGORY_MAP: Record<number, string> = {
@@ -26,13 +30,21 @@ async function getAllAlerts(): Promise<any[]> {
     const now = Date.now();
     if (cachedData && now - cacheTime < CACHE_TTL) return cachedData;
 
-    const res = await fetch(TZEVAADOM_URL, {
-        headers: { 'User-Agent': 'Mozilla/5.0' },
-        cache: 'no-store',
-    });
-    if (!res.ok) throw new Error(`tzevaadom responded with ${res.status}`);
+    let raw: any[];
 
-    const raw: any[] = await res.json();
+    try {
+        const res = await fetch(TZEVAADOM_URL, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            cache: 'no-store',
+        });
+        if (!res.ok) throw new Error(`tzevaadom responded with ${res.status}`);
+        raw = await res.json();
+    } catch (err: any) {
+        // Fallback: read from local file (pre-fetched from a non-datacenter IP)
+        console.warn('tzevaadom fetch failed, using local cache:', err.message);
+        const fileContent = readFileSync(LOCAL_CACHE_PATH, 'utf-8');
+        raw = JSON.parse(fileContent);
+    }
 
     // Convert to RawAlert format: [matrix_id, category, [cities], unix_timestamp]
     const alerts = raw.flatMap((record: any) => {
