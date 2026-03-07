@@ -102,7 +102,36 @@ export default function Home() {
     new Date(startDate),
     new Date(endDate),
     activeTab
-  ), [alerts, district, city, startDate, endDate, activeTab]);
+  ), [alerts, district, city, startDate, endDate, activeTab, districts]);
+
+  // חישוב % הסלמה — משווה 3 ימים אחרונים מול ממוצע יומי כללי
+  const escalation = useMemo(() => {
+    const locAlerts = filterByLocation(alerts, district, city, districts);
+    const catAlerts = locAlerts.filter(a =>
+      activeTab === ALL_EVENTS || a.category_desc === activeTab
+    );
+    if (catAlerts.length === 0) return null;
+
+    // ממוצע יומי כללי לכל המבצע
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const totalDays = Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86400000) + 1);
+    const avgPerDay = catAlerts.length / totalDays;
+
+    // ממוצע 3 ימים אחרונים
+    const threeDaysAgo = new Date(end);
+    threeDaysAgo.setDate(threeDaysAgo.getDate() - 2);
+    threeDaysAgo.setHours(0, 0, 0, 0);
+    const recent = catAlerts.filter(a => {
+      const [d, m, y] = a.date.split('.').map(Number);
+      return new Date(y, m - 1, d) >= threeDaysAgo;
+    });
+    const recentPerDay = recent.length / 3;
+
+    if (avgPerDay === 0) return null;
+    const pct = Math.round(((recentPerDay - avgPerDay) / avgPerDay) * 100);
+    return { pct, recentPerDay: Math.round(recentPerDay), avgPerDay: Math.round(avgPerDay) };
+  }, [alerts, district, city, districts, activeTab, startDate, endDate]);
 
   const exportToExcel = () => {
     const worksheet = XLSX.utils.json_to_sheet(stats);
@@ -200,6 +229,7 @@ export default function Home() {
           ⚠️ <strong>הצהרת אחריות:</strong> אפליקציה זו היא פרויקט אישי בלבד המבוסס על נתוני צבע אדום.
           אין בה המלצה, הנחיה, או עצה כלשהי. כל החלטה לגבי שימוש במידע זה היא באחריות המשתמש בלבד.
           המפתח אינו אחראי לכל תוצאה שתנבע משימוש באפליקציה.
+          הנתונים מתעדכנים לפחות אחת לשעה ולעיתים בתדירות גבוהה יותר — אינם בזמן אמת.
         </div>
       </header>
 
@@ -306,6 +336,32 @@ export default function Home() {
             </div>
           </div>
         </div>
+
+        {/* בנר הסלמה */}
+        {escalation !== null && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: '0.75rem',
+            padding: '0.75rem 1.25rem', borderRadius: '12px', marginBottom: '1rem',
+            background: escalation.pct > 20 ? '#fef2f2' : escalation.pct < -20 ? '#f0fdf4' : '#fefce8',
+            border: `1.5px solid ${escalation.pct > 20 ? '#fca5a5' : escalation.pct < -20 ? '#86efac' : '#fde047'}`,
+            direction: 'rtl'
+          }}>
+            <span style={{ fontSize: '1.5rem' }}>
+              {escalation.pct > 20 ? '🔴' : escalation.pct < -20 ? '🟢' : '🟡'}
+            </span>
+            <div>
+              <strong style={{ fontSize: '1rem' }}>
+                {escalation.pct > 20 ? `הסלמה של ${escalation.pct}%` :
+                 escalation.pct < -20 ? `הרגעה של ${Math.abs(escalation.pct)}%` :
+                 'פעילות יציבה'}
+              </strong>
+              <span style={{ fontSize: '0.85rem', color: '#64748b', marginRight: '0.5rem' }}>
+                — 3 הימים האחרונים: {escalation.recentPerDay} התראות/יום
+                (ממוצע המבצע: {escalation.avgPerDay}/יום)
+              </span>
+            </div>
+          </div>
+        )}
 
         <div className="tabs scrollable-tabs">
           {categories.map(cat => (
