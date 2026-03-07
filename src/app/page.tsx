@@ -245,9 +245,9 @@ export default function Home() {
                   onClick={locateMe}
                   disabled={locating}
                   title="זהה מיקום אוטומטית"
-                  style={{ padding: '0.5rem 0.75rem', whiteSpace: 'nowrap' }}
+                  style={{ padding: '0.5rem', minWidth: '2.5rem', flexShrink: 0 }}
                 >
-                  {locating ? '⏳' : '📍'} {locating ? 'מאתר...' : 'המיקום שלי'}
+                  {locating ? '⏳' : '📍'}
                 </button>
               </div>
               {/* הצעות */}
