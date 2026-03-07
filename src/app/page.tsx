@@ -29,6 +29,10 @@ export default function Home() {
   const [city, setCity] = useState(ALL_CITIES_IN_DISTRICT);
   const [activeTab, setActiveTab] = useState(ALL_EVENTS);
   const [viewMode, setViewMode] = useState<'tiles' | 'graph'>('tiles');
+  const [citySearch, setCitySearch] = useState('');
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [locating, setLocating] = useState(false);
+  const [locationError, setLocationError] = useState<string | null>(null);
 
   const categories = useMemo(() => {
     const cats = Array.from(new Set(alerts.map(a => a.category_desc))).filter(Boolean);
@@ -114,6 +118,78 @@ export default function Home() {
     return found ? found.cities : [];
   }, [districts, district]);
 
+  // כל הערים משוטחות לחיפוש
+  const allCities = useMemo(() =>
+    districts.flatMap(d => d.cities.map(c => ({ ...c, district: d.name }))),
+  [districts]);
+
+  // סינון הצעות לפי חיפוש
+  const citySuggestions = useMemo(() => {
+    if (!citySearch.trim() || citySearch.length < 2) return [];
+    const q = citySearch.trim();
+    return allCities.filter(c => c.name.includes(q)).slice(0, 8);
+  }, [citySearch, allCities]);
+
+  // בחירת עיר מהחיפוש
+  function selectCity(c: { name: string; value: string; district: string }) {
+    setDistrict(c.district);
+    setCity(c.value);
+    setCitySearch(c.name);
+    setShowSuggestions(false);
+  }
+
+  // זיהוי מיקום אוטומטי
+  function locateMe() {
+    if (!navigator.geolocation) {
+      setLocationError('הדפדפן לא תומך בגאולוקיישן');
+      return;
+    }
+    setLocating(true);
+    setLocationError(null);
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const { latitude, longitude } = pos.coords;
+          // Nominatim reverse geocode — חינמי, ללא API key
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&accept-language=he`,
+            { headers: { 'User-Agent': 'LionRoarIL/1.0' } }
+          );
+          const data = await res.json();
+          const cityName =
+            data.address?.city ||
+            data.address?.town ||
+            data.address?.village ||
+            data.address?.suburb ||
+            '';
+          if (!cityName) throw new Error('לא זוהה יישוב');
+
+          // חפש התאמה ב-allCities
+          const match = allCities.find(c =>
+            c.name.includes(cityName) || cityName.includes(c.name.replace(/ - .*/, ''))
+          );
+          if (match) {
+            selectCity(match);
+          } else {
+            // הצג את שם העיר בחיפוש גם אם לא נמצא match מדויק
+            setCitySearch(cityName);
+            setShowSuggestions(true);
+            setLocationError(`לא נמצאה "${cityName}" בנתונים — בחר מהרשימה`);
+          }
+        } catch (e: any) {
+          setLocationError('שגיאה בזיהוי המיקום');
+        } finally {
+          setLocating(false);
+        }
+      },
+      () => {
+        setLocationError('לא אושרה גישה למיקום');
+        setLocating(false);
+      },
+      { timeout: 8000 }
+    );
+  }
+
   return (
     <div className="container" dir="rtl">
       <header>
@@ -150,17 +226,55 @@ export default function Home() {
         {mainTab === 'alerts' && (<>
         <div className="card">
           <div className="controls">
+
+            {/* חיפוש חופשי + מיקום */}
+            <div className="control-group" style={{ flex: 2, position: 'relative' }}>
+              <label className="btn-icon"><MapPin size={16} /> חיפוש עיר</label>
+              <div style={{ display: 'flex', gap: '0.4rem' }}>
+                <input
+                  type="text"
+                  placeholder="הקלד שם עיר..."
+                  value={citySearch}
+                  onChange={e => { setCitySearch(e.target.value); setShowSuggestions(true); }}
+                  onFocus={() => setShowSuggestions(true)}
+                  onBlur={() => setTimeout(() => setShowSuggestions(false), 150)}
+                  style={{ flex: 1, padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1.5px solid #cbd5e1', fontSize: '1rem', direction: 'rtl' }}
+                />
+                <button
+                  className="primary btn-icon"
+                  onClick={locateMe}
+                  disabled={locating}
+                  title="זהה מיקום אוטומטית"
+                  style={{ padding: '0.5rem 0.75rem', whiteSpace: 'nowrap' }}
+                >
+                  {locating ? '⏳' : '📍'} {locating ? 'מאתר...' : 'המיקום שלי'}
+                </button>
+              </div>
+              {/* הצעות */}
+              {showSuggestions && citySuggestions.length > 0 && (
+                <div style={{ position: 'absolute', top: '100%', right: 0, left: 0, background: '#fff', border: '1.5px solid #cbd5e1', borderRadius: '8px', zIndex: 100, boxShadow: '0 4px 16px rgba(0,0,0,0.1)', marginTop: '2px' }}>
+                  {citySuggestions.map(c => (
+                    <div
+                      key={c.value}
+                      onMouseDown={() => selectCity(c)}
+                      style={{ padding: '0.6rem 1rem', cursor: 'pointer', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
+                    >
+                      <span style={{ fontWeight: 600 }}>{c.name}</span>
+                      <span style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{c.district}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {locationError && <p style={{ color: '#ef4444', fontSize: '0.8rem', margin: '0.3rem 0 0' }}>{locationError}</p>}
+            </div>
+
+            {/* מחוז */}
             <div className="control-group">
-              <label htmlFor="district" className="btn-icon">
-                <MapPin size={16} /> מחוז
-              </label>
+              <label htmlFor="district" className="btn-icon"><MapPin size={16} /> מחוז</label>
               <select
                 id="district"
                 value={district}
-                onChange={(e) => {
-                  setDistrict(e.target.value);
-                  setCity(ALL_CITIES_IN_DISTRICT);
-                }}
+                onChange={(e) => { setDistrict(e.target.value); setCity(ALL_CITIES_IN_DISTRICT); setCitySearch(''); }}
               >
                 <option value={ALL_DISTRICTS}>{ALL_DISTRICTS}</option>
                 {districts.map(d => (
@@ -168,10 +282,10 @@ export default function Home() {
                 ))}
               </select>
             </div>
+
+            {/* עיר */}
             <div className="control-group">
-              <label htmlFor="city" className="btn-icon">
-                <MapPin size={16} /> עיר / יישוב
-              </label>
+              <label htmlFor="city" className="btn-icon"><MapPin size={16} /> עיר / יישוב</label>
               <select
                 id="city"
                 value={city}
@@ -184,6 +298,7 @@ export default function Home() {
                 ))}
               </select>
             </div>
+
             <div className="control-group">
               <button className="primary btn-icon" onClick={() => window.location.reload()}>
                 <RefreshCw size={18} /> רענן
